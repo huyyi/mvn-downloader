@@ -60,13 +60,19 @@ uv run main.py org.springframework.boot --no-mirrors
 
 # 不解析依赖
 uv run main.py org.springframework.boot --no-deps
+
+# 排除特定的 subgroup（支持部分匹配）
+uv run main.py org.springframework --exclude boot autoconfigure
+
+# 排除多个 subgroup（只下载 org.springframework.kafka 和 org.springframework.integration）
+uv run main.py org.springframework -e boot data web security cloud
 ```
 
 ### 完整参数说明
 
 ```bash
 uv run main.py [-h] [-o OUTPUT] [-w WORKERS] [-d DEPTH] [-m [MIRRORS ...]] 
-               [--no-mirrors] [--no-deps] group_id
+               [--no-mirrors] [--no-deps] [-e [EXCLUDE ...]] [-v] group_id
 
 参数:
   group_id              Maven groupId，如: org.springframework.boot
@@ -76,6 +82,8 @@ uv run main.py [-h] [-o OUTPUT] [-w WORKERS] [-d DEPTH] [-m [MIRRORS ...]]
   -m, --mirrors         自定义镜像源列表（多个URL用空格分隔）
   --no-mirrors          不使用镜像源，直接从源站下载
   --no-deps             不解析依赖
+  -e, --exclude         排除的 subgroup 模式列表（如: boot data）
+  -v, --verbose         输出详细日志（镜像选择、下载来源等）
   -h, --help            显示帮助信息
 ```
 
@@ -123,6 +131,19 @@ uv run main.py org.springframework.boot
 ✓ 发现未完成的下载任务: 123 个文件
   是否继续上次的下载？(y/n): y
 🔄 恢复下载任务
+```
+
+### 排除特定的 subgroup
+
+```bash
+# 只下载 org.springframework 但排除 boot 相关的包
+uv run main.py org.springframework --exclude boot
+
+# 排除多个 subgroup
+uv run main.py org.springframework -e boot data web security
+
+# 示例：只下载 org.springframework.kafka，排除其他所有 spring 子项目
+uv run main.py org.springframework -e boot data web security cloud integration batch amqp
 ```
 
 ### 下载其他包

@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 
 class MavenDownloader:
-    def __init__(self, base_url="https://repo1.maven.org/maven2/", output_dir="./downloads", max_workers=10, mirrors=None, verbose=False):
+    def __init__(self, base_url="https://repo1.maven.org/maven2/", output_dir="./downloads", max_workers=10, mirrors=None, verbose=False, exclude_patterns=None):
         self.base_url = base_url
         self.output_dir = Path(output_dir)
         self.max_workers = max_workers
@@ -29,6 +29,7 @@ class MavenDownloader:
         self.pending_files = []  # 待下载文件列表
         self.interrupted = False  # 中断标志
         self.new_dependencies = Queue()  # 新发现的依赖 groupId 队列
+        self.exclude_patterns = exclude_patterns if exclude_patterns else []  # 排除模式列表
         
         # 状态文件路径
         self.state_dir = self.output_dir / ".mvn-downloader"
@@ -167,6 +168,22 @@ class MavenDownloader:
     def group_id_to_path(self, group_id):
         """将 groupId 转换为路径，如 org.springframework.boot -> org/springframework/boot"""
         return group_id.replace('.', '/')
+    
+    def _should_exclude(self, group_id):
+        """检查 groupId 是否应该被排除"""
+        if not self.exclude_patterns:
+            return False
+        
+        # 将 groupId 分割成部分，如 org.springframework.boot -> ['org', 'springframework', 'boot']
+        parts = group_id.split('.')
+        
+        # 检查是否有任何部分匹配排除模式
+        for pattern in self.exclude_patterns:
+            # 支持完整匹配或部分匹配
+            if pattern in parts or any(pattern in part for part in parts):
+                return True
+        
+        return False
     
     def get_artifacts_list(self, group_path):
         """获取指定 group 路径下的所有 artifact"""
@@ -449,6 +466,36 @@ class MavenDownloader:
         print(f"{indent}🔍 扫描 artifacts...")
         artifacts, subgroups = self.get_artifacts_list(group_path)
         
+        # 过滤排除的 artifacts 和 subgroups
+        excluded_artifacts = []
+        excluded_subgroups = []
+        
+        if self.exclude_patterns:
+            # 过滤 artifacts
+            filtered_artifacts = []
+            for artifact in artifacts:
+                artifact_id = artifact.replace('/', '.')
+                if self._should_exclude(artifact_id):
+                    excluded_artifacts.append(artifact)
+                else:
+                    filtered_artifacts.append(artifact)
+            artifacts = filtered_artifacts
+            
+            # 过滤 subgroups
+            filtered_subgroups = []
+            for subgroup in subgroups:
+                subgroup_id = subgroup.replace('/', '.')
+                if self._should_exclude(subgroup_id):
+                    excluded_subgroups.append(subgroup)
+                else:
+                    filtered_subgroups.append(subgroup)
+            subgroups = filtered_subgroups
+            
+            # 打印排除信息
+            if excluded_artifacts or excluded_subgroups:
+                total_excluded = len(excluded_artifacts) + len(excluded_subgroups)
+                print(f"{indent}⊘ 排除 {total_excluded} 个项目 (artifacts: {len(excluded_artifacts)}, subgroups: {len(excluded_subgroups)})")
+        
         if not artifacts and subgroups:
             print(f"{indent}📂 找到 {len(subgroups)} 个子group，继续探索...")
             for subgroup_path in subgroups:
@@ -644,6 +691,7 @@ def main():
     parser.add_argument('-m', '--mirrors', nargs='*', help='自定义镜像源列表（多个URL用空格分隔）')
     parser.add_argument('--no-mirrors', action='store_true', help='不使用镜像源，直接从源站下载')
     parser.add_argument('--no-deps', action='store_true', help='不解析依赖')
+    parser.add_argument('-e', '--exclude', nargs='*', help='排除的 subgroup 模式列表（如: boot data）')
     parser.add_argument('-v', '--verbose', action='store_true', help='输出详细日志（镜像选择、下载来源等）')
     
     args = parser.parse_args()
@@ -660,7 +708,8 @@ def main():
         output_dir=args.output,
         max_workers=args.workers,
         mirrors=mirrors,
-        verbose=args.verbose
+        verbose=args.verbose,
+        exclude_patterns=args.exclude
     )
     
     downloader.download_group(
