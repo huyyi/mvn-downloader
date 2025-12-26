@@ -158,7 +158,7 @@ class Downloader:
             for link in soup.find_all("a"):
                 href = link.get("href")
                 if href and href not in ("../", "./"):
-                    if any(href.endswith(suffix) for suffix in (".asc", ".sha1", ".md5")):
+                    if any(href.endswith(suffix) for suffix in (".asc", ".sha1", ".md5", ".sha256", ".sha512")):
                         self.logger.debug("Skip signature/checksum file: %s", urllib.parse.urljoin(url, href))
                         continue
                     elif href.endswith("/"):
@@ -167,6 +167,10 @@ class Downloader:
                     else:
                         self.logger.debug("Queue file: %s", urllib.parse.urljoin(url, href))
                         self.download_queue.put(urllib.parse.urljoin(url, href))
+        else:
+            # 该路径是一个文件，直接加入下载队列
+            self.logger.debug("Queue file (direct): %s", url)
+            self.download_queue.put(url)
 
 
     def download_worker(self):
